@@ -4,19 +4,10 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 
-// Load config from config.json
-const config = require('./config.json');
+// Load configuration from config.json
+const config = JSON.parse(fs.readFileSync('./config.json'));
 
-const {
-  botId,
-  token,
-  commonScale,
-  datasetFolderPath,
-  backgroundImagePath,
-  smallImagePath,
-  pingsFilePath,
-  specialServerIds
-} = config;
+const { botId, token, datasetFolderPath, backgroundImagePath, smallImagePath, pingsFilePath, commonScale } = config;
 
 // Load dataset image files into memory
 const dataset = fs.readdirSync(datasetFolderPath)
@@ -35,15 +26,6 @@ if (fs.existsSync(pingsFilePath)) {
   pings = JSON.parse(fs.readFileSync(pingsFilePath));
 } else {
   fs.writeFileSync(pingsFilePath, JSON.stringify({}));
-}
-
-// Helper function to split an array into chunks
-function splitIntoChunks(array, chunkSize) {
-  const result = [];
-  for (let i = 0; i < array.length; i += chunkSize) {
-    result.push(array.slice(i, i + chunkSize));
-  }
-  return result;
 }
 
 async function loadDatasetImages() {
@@ -108,6 +90,7 @@ async function findPokemonByImage(imageBuffer) {
   return bestMatch;
 }
 
+// Function to create an image with text using sharp and SVG
 async function createImageWithText(text) {
   const textWidth = 400;
   const textHeight = 80;
@@ -127,7 +110,7 @@ async function createImageWithText(text) {
           font-family: 'Georgia', serif;
           font-weight: bold;
           font-size: 35px;
-          fill: #0645AD;
+          fill: #0645AD; /* Admiral Blue color */
         }
       </style>
       <rect width="100%" height="100%" fill="transparent"/>
@@ -152,67 +135,6 @@ const client = new Client({
 });
 
 client.on('messageCreate', async message => {
-  if (message.content.startsWith('<@1201198231539941437> cl list')) {
-    const userId = message.author.id;
-
-    if (pings[userId] && pings[userId].pokemonList && pings[userId].pokemonList.length > 0) {
-      const pokemonNames = pings[userId].pokemonList;
-      const chunkSize = 50;
-      const chunks = splitIntoChunks(pokemonNames, chunkSize);
-
-      const introMessage = `**Your Pokémon List:**\n${chunks[0].map((name, index) => `${index + 1}. ${name}`).join('\n')}`;
-      await message.reply(introMessage);
-
-      for (let i = 1; i < chunks.length; i++) {
-        const chunkMessage = chunks[i].map((name, index) => `${index + 1 + i * chunkSize}. ${name}`).join('\n');
-        await message.reply(chunkMessage);
-      }
-    } else {
-      await message.reply('You have no Pokémon added to your list.');
-    }
-  }
-
-  if (message.content.startsWith('<@1201198231539941437> cl add')) {
-    const args = message.content.split(' ').slice(3);
-    const pokemonNames = args.join(' ').split(',').map(name => name.trim()).filter(name => name.length > 0);
-
-    if (pokemonNames.length === 0) {
-      return message.reply('Please specify at least one Pokémon name.');
-    }
-
-    const userId = message.author.id;
-
-    if (!pings[userId]) {
-      pings[userId] = { pokemonList: [], afk: false };
-    }
-
-    const addedPokemons = [];
-    const alreadyInList = [];
-
-    for (const pokemonName of pokemonNames) {
-      if (!pings[userId].pokemonList.includes(pokemonName)) {
-        pings[userId].pokemonList.push(pokemonName);
-        addedPokemons.push(pokemonName);
-      } else {
-        alreadyInList.push(pokemonName);
-      }
-    }
-
-    fs.writeFileSync(pingsFilePath, JSON.stringify(pings, null, 2));
-
-    let response = '';
-
-    if (addedPokemons.length > 0) {
-      response += `Added ${addedPokemons.join(', ')} to your ping list.`;
-    }
-
-    if (alreadyInList.length > 0) {
-      response += `\n${alreadyInList.join(', ')} are already in your ping list.`;
-    }
-
-    return message.reply(response);
-  }
-
   if (message.author.id === botId && message.embeds.length > 0) {
     const embed = message.embeds[0];
     if (embed.title && embed.title.startsWith('A wild Pokémon')) {
@@ -223,22 +145,26 @@ client.on('messageCreate', async message => {
           const bestMatch = await findPokemonByImage(channelImageBuffer);
 
           if (bestMatch.name) {
-            const guildId = message.guild.id;
+            const textImageBuffer = await createImageWithText(bestMatch.name);
 
-            if (specialServerIds.includes(guildId)) {
-              const sentMessage = await message.reply(bestMatch.name);
-              setTimeout(() => {
-                sentMessage.delete().catch(console.error);
-              }, 4000);
-            } else {
-              const textImageBuffer = await createImageWithText(bestMatch.name);
-              const attachment = new AttachmentBuilder(textImageBuffer, { name: 'pokemon-name.png' });
-              const sentMessage = await message.reply({ files: [attachment] });
-              setTimeout(() => {
-                sentMessage.delete().catch(console.error);
-              }, 4000);
+            // Send the image as an attachment
+            const attachment = new AttachmentBuilder(textImageBuffer, { name: 'pokemon-name.png' });
+            const sentMessage = await message.reply({ files: [attachment] });
+
+            // Ping users who want to be notified for this Pokémon
+            const usersToPing = Object.entries(pings)
+              .filter(([userId, userData]) => userData?.pokemonList?.includes(bestMatch.name))
+              .map(([userId]) => `<@${userId}>`);
+
+            if (usersToPing.length > 0) {
+              const pingMessage = `${usersToPing.join(', ')}, a ${bestMatch.name} has appeared!`;
+              await message.reply(pingMessage);
             }
+          } else {
+            console.error('Failed to identify the Pokémon.');
           }
+        } else {
+          console.error('Failed to process the image.');
         }
       }
     }
