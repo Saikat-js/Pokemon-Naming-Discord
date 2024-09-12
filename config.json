@@ -1,17 +1,10 @@
 {
-  "botId": "1275616852432781315",
-  "token": "MTIwMTE5ODIzMTUzOTk0MTQzNw.G_OFHz.nwbb3cy5GQuWfKkPOfQdss_xps9oWnXVNsGUzk",
+  "botId": "",
+  "token": "",
   "commonScale": { "width": 80, "height": 80 },
   "datasetFolderPath": "./dataset",
   "backgroundImagePath": "./Background.jpg",
   "smallImagePath": "./image.png",
   "pingsFilePath": "./pings.json",
-  "specialServerIds": [
-    "1217166862882701466",
-    "1208226920257552384",
-    "1262598925609861170",
-    "1208229033117089833",
-    "1282962667572690997",
-    "1282964642804535319"
-  ]
+  
 }
